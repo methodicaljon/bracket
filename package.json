@@ -1,0 +1,21 @@
+{
+  "name": "bracket",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/src/index.js",
+    "test": "node --test server/test/entitlement.test.js server/test/client.test.js server/test/http.test.js",
+    "test:emulator": "firebase emulators:exec --only auth,firestore --project demo-bracket \"node --test server/test/entitlement.test.js server/test/client.test.js server/test/http.test.js\"",
+    "check-secrets": "node scripts/check-secrets.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "stripe": "23.1.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "^14.25.1"
+  }
+}
