@@ -7985,11 +7985,23 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
     return '<p class="hint acct-msg' + (m && m.kind === 'err' ? ' err' : m && m.kind === 'ok' ? ' ok' : '') + '" id="' + id + '-msg" role="status">' + (m ? esc(m.text) : '') + '</p>';
   }
   function say(id, text, kind) { ui.acct.msgs = ui.acct.msgs || {}; ui.acct.msgs[id] = { text: text, kind: kind || '' }; }
+  function pwKind(auto) { return auto === 'new-password' ? 'new-password' : 'current-password'; }
   function pwField(id, label, auto, hint) {
-    var shown = !!(ui.acct.show && ui.acct.show[id]);
-    return '<div class="field"><label for="' + id + '">' + label + '</label><div class="pw"><input id="' + id + '" type="' + (shown ? 'text' : 'password') + '" autocomplete="' + auto + '" autocapitalize="off" autocorrect="off" spellcheck="false"' + (hint ? ' aria-describedby="' + id + '-hint"' : '') + '>' +
-      '<button class="btn text" type="button" data-pw="' + id + '" aria-label="' + (shown ? 'Hide' : 'Show') + ' password">' + (shown ? 'Hide' : 'Show') + '</button></div>' +
+    var kind = pwKind(auto);
+    return '<div class="field"><label for="' + id + '">' + label + '</label><div class="pw"><input id="' + id + '" name="' + kind + '" type="password" data-password="1" autocomplete="' + kind + '" autocapitalize="off" autocorrect="off" spellcheck="false"' + (hint ? ' aria-describedby="' + id + '-hint"' : '') + '>' +
+      '<button class="btn text" type="button" data-pw="' + id + '" aria-label="Show password" aria-pressed="false">Show</button></div>' +
       (hint ? '<p class="hint" id="' + id + '-hint">' + hint + '</p>' : '') + '</div>';
+  }
+  /* Reveal is only the live control. A rebuild always starts hidden, and the password is never copied into a text field. */
+  function hidePasswords(clearValue) {
+    ui.acct.show = {};
+    $$('#acct-body [data-password]').forEach(function (el) {
+      el.type = 'password';
+      el.setAttribute('autocapitalize', 'off');
+      el.setAttribute('autocorrect', 'off');
+      el.spellcheck = false;
+      if (clearValue) el.value = '';
+    });
   }
   function lockNote(reset) {
     return '<div class="lockbox">' + LOCK_SVG + '<div><b>' + (reset ? 'Before you reset' : 'Only you can read it') + '</b><p>' +
@@ -8064,7 +8076,7 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
   }
   function acctLocked(i, a) {
     var h = '<div class="warnbox"><b>Your synced plan is locked with an older password.</b> This happens after a password reset. Your old password still opens it.</div>' +
-      '<form class="acct-form" id="a-unlock" novalidate>' + pwField('a-old', 'Old password', 'off') +
+      '<form class="acct-form" id="a-unlock" novalidate>' + pwField('a-old', 'Old password', 'current-password') +
       '<button class="btn primary block" type="submit"' + (a.busy === 'a-unlock' ? ' disabled>Unlocking…' : '>Unlock it') + '</button>' + acctMsg('a-unlock') + '</form>' +
       '<div class="section-head" style="margin-top:22px"><span class="eyebrow">Don\'t remember it?</span></div>';
     var what = i.hasPlan ? 'Replace it with this device\'s plan' : 'Start over with an empty account';
@@ -8108,14 +8120,29 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
     var i = cloud.info(), a = ui.acct;
     // keep what was typed: passwords live only in the page, never in saved data
     var kept = {}, act = document.activeElement, focusId = act && box.contains(act) ? act.id : null;
-    $$('input', box).forEach(function (el) { if (el.id && !el.readOnly) kept[el.id] = el.value; });
+    $$('input', box).forEach(function (el) {
+      if (!el.id || el.readOnly) return;
+      if (el.hasAttribute('data-password')) {
+        if (!a.dropPasswords) kept[el.id] = el.value;
+        return;
+      }
+      kept[el.id] = el.value;
+    });
+    a.dropPasswords = false;
+    a.show = {};
     (a.clear || []).forEach(function (id) { delete kept[id]; });
     a.clear = [];
     ui.acctKey = acctKey(i);
     if (!i.signedIn) { a.billingLoaded = false; a.entitlement = null; a.portal = false; }
     box.innerHTML = i.signedIn ? acctOn(i, a) : acctOff(i, a);
     if (i.signedIn && !a.billingLoaded) { a.billingLoaded = true; loadBilling(false); }
-    Object.keys(kept).forEach(function (id) { var el = $('#' + id, box); if (el && !el.readOnly && kept[id]) el.value = kept[id]; });
+    Object.keys(kept).forEach(function (id) {
+      var el = $('#' + id, box);
+      if (!el || el.readOnly || !kept[id]) return;
+      if (el.hasAttribute('data-password')) el.type = 'password';
+      if (el.hasAttribute('data-password') && el.type !== 'password') return;
+      el.value = kept[id];
+    });
     if (focusId) { var f = $('#' + focusId, box); if (f && !f.disabled) f.focus(); }
   }
   function updateAcctStatus(i) {
@@ -8174,6 +8201,7 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
     if (first && !(i && i.signedIn)) first.focus();
   }
   function leaveAccount() {
+    hidePasswords(true);
     var to = ui.acct.from || (state.onboarded ? 'settings' : 'welcome');
     if ((to === 'dash' || to === 'settings') && !state.onboarded) to = 'welcome';
     show(to);
@@ -8249,34 +8277,43 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
           : mode === 'create' ? cloud.signUp(email, pw)
             : identity === 'username' ? cloud.signInUsername(username, pw)
               : cloud.signIn(email, pw);
+      hidePasswords(false);
       a.busy = 'a-form'; renderAccount();
       job.then(function () {
         a.busy = null;
-        if (mode === 'reset') { a.mode = 'signin'; say('a-form', 'If an account matches, a reset link is on its way. Check your spam folder too. The email address stays private.', 'ok'); renderAccount(); return; }
-        a.clear = ['a-pass'];
+        if (mode === 'reset') { a.mode = 'signin'; hidePasswords(true); say('a-form', 'If an account matches, a reset link is on its way. Check your spam folder too. The email address stays private.', 'ok'); renderAccount(); return; }
+        a.dropPasswords = true;
+        a.clear = ['a-pass', 'a-old', 'a-cur', 'a-new', 'a-del'];
+        hidePasswords(true);
         a.billingLoaded = false;
         afterSignIn();
       }, acctFail('a-form'));
       return;
     }
     if (f.id === 'a-unlock') {
+      var oldPw = acctVal('a-old');
+      hidePasswords(false);
       a.busy = 'a-unlock'; renderAccount();
-      cloud.unlock(acctVal('a-old')).then(function () { a.busy = null; a.clear = ['a-old']; say('a-main', 'Unlocked. Your synced plan now opens with your current password.', 'ok'); afterSignIn(); }, acctFail('a-unlock'));
+      cloud.unlock(oldPw).then(function () { a.busy = null; a.dropPasswords = true; a.clear = ['a-old']; hidePasswords(true); say('a-main', 'Unlocked. Your synced plan now opens with your current password.', 'ok'); afterSignIn(); }, acctFail('a-unlock'));
       return;
     }
     if (f.id === 'a-change') {
+      var curPw = acctVal('a-cur'), newPw = acctVal('a-new');
+      hidePasswords(false);
       a.busy = 'a-change'; renderAccount();
-      cloud.changePassword(acctVal('a-cur'), acctVal('a-new')).then(function () {
-        a.busy = null; a.clear = ['a-cur', 'a-new'];
+      cloud.changePassword(curPw, newPw).then(function () {
+        a.busy = null; a.dropPasswords = true; a.clear = ['a-cur', 'a-new']; hidePasswords(true);
         say('a-change', 'Password changed. Your other devices will ask you to sign in again.', 'ok');
         renderAccount();
       }, acctFail('a-change'));
       return;
     }
     if (f.id === 'a-delete') {
+      var delPw = acctVal('a-del');
+      hidePasswords(false);
       a.busy = 'a-delete'; renderAccount();
-      cloud.deleteAccount(acctVal('a-del')).then(function () {
-        a.busy = null; a.clear = ['a-del']; a.mode = 'signin'; a.moreOpen = false;
+      cloud.deleteAccount(delPw).then(function () {
+        a.busy = null; a.dropPasswords = true; a.clear = ['a-del']; hidePasswords(true); a.mode = 'signin'; a.moreOpen = false;
         say('a-form', 'Your account and its synced plan are deleted. Your plan is still on this device.', 'ok');
         renderAccount();
       }, acctFail('a-delete'));
@@ -8288,11 +8325,16 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
     var a = ui.acct;
     if (t.hasAttribute('data-pw')) {
       var inp = $('#' + t.getAttribute('data-pw'));
-      if (!inp) return;
+      if (!inp || !inp.hasAttribute('data-password')) return;
       var show2 = inp.type === 'password';
       inp.type = show2 ? 'text' : 'password';
+      inp.setAttribute('autocapitalize', 'off');
+      inp.setAttribute('autocorrect', 'off');
+      inp.spellcheck = false;
       a.show = a.show || {}; a.show[inp.id] = show2;
-      t.textContent = show2 ? 'Hide' : 'Show'; t.setAttribute('aria-label', (show2 ? 'Hide' : 'Show') + ' password');
+      t.textContent = show2 ? 'Hide' : 'Show';
+      t.setAttribute('aria-label', (show2 ? 'Hide' : 'Show') + ' password');
+      t.setAttribute('aria-pressed', show2 ? 'true' : 'false');
       return;
     }
     if (t.id === 'a-portal') {
@@ -8311,6 +8353,8 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
       var keepUser = $('#a-user'), keepEmail = $('#a-email');
       if (keepUser && !keepUser.readOnly) a.username = keepUser.value;
       if (keepEmail && !keepEmail.readOnly) a.email = keepEmail.value;
+      a.dropPasswords = true;
+      hidePasswords(true);
       renderAccount();
       return;
     }
@@ -8320,6 +8364,8 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
       var uu = $('#a-user');
       if (uu && !uu.readOnly) a.username = uu.value;
       a.mode = t.getAttribute('data-acct') || t.getAttribute('data-acct-mode'); a.msgs = {};
+      a.dropPasswords = true;
+      hidePasswords(true);
       renderAccount();
       var next = $(a.mode === 'reset' || !a.email ? '#a-email' : '#a-pass');
       if (next) next.focus();
@@ -8332,14 +8378,14 @@ details.more-in > summary { cursor: pointer; padding: 12px 0 4px; font-weight: 7
       var wipe = t.id === 'a-out-wipe';
       t.disabled = true; t.textContent = 'Signing out…';
       cloud.signOut(wipe).then(function () {
-        a.confirmOut = false; a.mode = 'signin';
+        a.confirmOut = false; a.mode = 'signin'; a.dropPasswords = true; hidePasswords(true);
         if (wipe) { wipeLocal(); a.from = 'welcome'; show('welcome'); $('#w-restore-note').textContent = 'Signed out. Your plan was removed from this device.'; return; }
         say('a-form', 'Signed out. Your plan is still on this device.', 'ok');
         renderAccount();
       });
       return;
     }
-    if (t.id === 'a-stop') { cloud.signOut(false).then(function () { a.mode = 'signin'; a.email = ''; renderAccount(); }); return; }
+    if (t.id === 'a-stop') { cloud.signOut(false).then(function () { a.mode = 'signin'; a.email = ''; a.dropPasswords = true; hidePasswords(true); renderAccount(); }); return; }
     if (t.hasAttribute('data-resolve')) {
       $$('[data-resolve]').forEach(function (b) { b.disabled = true; });
       cloud.resolve(t.getAttribute('data-resolve')).then(function () {
