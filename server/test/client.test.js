@@ -46,6 +46,12 @@ test('public Firebase web config is present and Analytics is not loaded', () => 
   assert.equal(html.includes('G-1LVNHGJJZE'), false);
 });
 
+test('a missing server identity has its own message', () => {
+  const cloud = browserGlobal();
+  vm.runInContext(extract('/* Bracket accounts and sync.'), cloud);
+  assert.equal(cloud.module.exports.messageFor('FIREBASE_NOT_CONFIGURED'), 'Sign-in isn\'t available on this server yet.');
+});
+
 test('inline scripts parse', () => {
   const parts = html.split('<script>').slice(1);
   assert.ok(parts.length >= 5);

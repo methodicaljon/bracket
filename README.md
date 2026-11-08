@@ -81,7 +81,7 @@ Live sign-in and live payments are blocked until the setup below is filled in. N
    - `radar.early_fraud_warning.created`
 5. Allowlist [Stripe's webhook IP addresses](https://docs.stripe.com/ips.md) on the deployed endpoint. Signature verification is always required. Set `ENFORCE_STRIPE_WEBHOOK_IPS=1` and `STRIPE_WEBHOOK_IPS` only when the app sees Stripe's addresses directly.
 6. The public web config for project `bracket-2b961` is already in [config.js](config.js). Copy that `apiKey` into `FIREBASE_WEB_API_KEY`. Jon reports Email/Password is enabled. This repo has not called Firebase to confirm that, and it has not created any account there.
-7. Create a Firebase Admin service account for `bracket-2b961` and store the JSON outside the repo. Point `GOOGLE_APPLICATION_CREDENTIALS` at it, or set `FIREBASE_SERVICE_ACCOUNT_JSON` from the secrets manager. Do not commit it. Without it, the server cannot reserve usernames or attach Stripe customers on the live project. Publish [firestore.rules](firestore.rules) in the Firebase console. That publish is a console action and has not been done from here.
+7. On Cloud Run the server uses the attached runtime service account (`K_SERVICE`). Do not download a service-account JSON for that. A local machine still needs the Auth and Firestore emulators, or `GOOGLE_APPLICATION_CREDENTIALS` / `FIREBASE_SERVICE_ACCOUNT_JSON` kept outside the repo. Publish [firestore.rules](firestore.rules) in the Firebase console. That publish is a console action and has not been done from here.
 8. Copy [.env.example](.env.example) to `.env` and fill the placeholders. `.env` is gitignored.
 9. In the Stripe sandbox, save a Customer Portal configuration so the manage-billing button can open.
 10. `npm install` then `npm start`. The server listens on `PORT` (default 8787) and serves the app and the API on one origin.
@@ -109,7 +109,7 @@ Before sign-in or password reset will work from a browser:
 - Authentication → Settings → Authorized domains must include every origin that serves Bracket. `localhost` and `bracket-2b961.firebaseapp.com` are the usual defaults. Add the real site domain before using it. This list was not read or changed from here.
 - If the web API key has HTTP referrer restrictions in Google Cloud, add the same origins.
 - Firestore must exist in Native mode and [firestore.rules](firestore.rules) must be published. Not done from here.
-- The Bracket server needs the Admin SDK credential described above, plus `FIREBASE_WEB_API_KEY` set to the public `apiKey`. Username registration on the live project cannot run until that credential exists.
+- Cloud Run initializes Firebase Admin from its runtime service account. Set `FIREBASE_WEB_API_KEY` to the public `apiKey`. A downloaded service-account JSON is not used there. The web API key must allow the Identity Toolkit API from the server, not only from browser referrers.
 
 No live Firebase Auth account was created or modified.
 

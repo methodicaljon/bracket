@@ -7,8 +7,8 @@
   },
   "scripts": {
     "start": "node server/src/index.js",
-    "test": "node --test server/test/entitlement.test.js server/test/client.test.js server/test/http.test.js",
-    "test:emulator": "firebase emulators:exec --only auth,firestore --project demo-bracket \"node --test server/test/entitlement.test.js server/test/client.test.js server/test/http.test.js\"",
+    "test": "node --test server/test/firebase-ready.test.js server/test/entitlement.test.js server/test/client.test.js server/test/http.test.js",
+    "test:emulator": "firebase emulators:exec --only auth,firestore --project demo-bracket \"node --test server/test/firebase-ready.test.js server/test/entitlement.test.js server/test/client.test.js server/test/http.test.js\"",
     "check-secrets": "node scripts/check-secrets.mjs"
   },
   "dependencies": {

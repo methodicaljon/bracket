@@ -4,15 +4,27 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 let configured = false;
 
-export function initFirebase(config) {
+/** How this process should talk to Firebase Admin. Cloud Run sets K_SERVICE and has no key file. */
+export function firebaseAdminMode(env, config) {
+  const source = env || {};
+  if (config && config.firebaseEmulator) return 'emulator';
+  if (config && config.serviceAccountJson) return 'service-account-json';
+  if (String(source.GOOGLE_APPLICATION_CREDENTIALS || '').trim()) return 'adc-file';
+  if (String(source.K_SERVICE || '').trim() || String(source.K_REVISION || '').trim()) return 'adc-runtime';
+  return 'off';
+}
+
+export function initFirebase(config, options = {}) {
+  const mode = options.mode || firebaseAdminMode(process.env, config);
+  if (mode === 'off') throw new Error('Firebase Admin is not configured');
   if (!getApps().length) {
-    const options = { projectId: config.projectId };
-    if (!config.firebaseEmulator && config.serviceAccountJson) {
-      options.credential = cert(JSON.parse(config.serviceAccountJson));
-    } else if (!config.firebaseEmulator && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      options.credential = applicationDefault();
+    const appOptions = { projectId: config.projectId };
+    if (mode === 'service-account-json') {
+      appOptions.credential = cert(JSON.parse(config.serviceAccountJson));
+    } else if (mode === 'adc-file' || mode === 'adc-runtime') {
+      appOptions.credential = applicationDefault();
     }
-    initializeApp(options);
+    initializeApp(appOptions);
   }
   const db = getFirestore();
   if (!configured) {

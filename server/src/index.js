@@ -2,14 +2,14 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { configFromEnv } from './config.js';
-import { initFirebase, publishAccessPolicy } from './firebase.js';
+import { firebaseAdminMode, initFirebase, publishAccessPolicy } from './firebase.js';
 import { createHandler } from './http.js';
 import { createStripe } from './stripeClient.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const config = configFromEnv();
-const firebaseReady = config.firebaseEmulator || !!config.serviceAccountJson || !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
-const firebase = firebaseReady ? initFirebase(config) : { auth: null, db: null };
+const firebaseMode = firebaseAdminMode(process.env, config);
+const firebase = firebaseMode === 'off' ? { auth: null, db: null } : initFirebase(config, { mode: firebaseMode });
 const stripe = config.stripeSecretKey ? createStripe(config) : null;
 
 if (firebase.db) {
